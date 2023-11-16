@@ -1,0 +1,56 @@
+data "azurerm_resource_group" "this" {
+  name     = var.resource_group_name
+}
+resource "azurerm_virtual_wan" "this" {
+  name                = var.virtualwan
+  resource_group_name = data.azurerm_resource_group.this.name
+  location            = data.azurerm_resource_group.this.location
+}
+resource "azurerm_virtual_hub" "this" {
+ for_each = var.virtual_hub
+  name                = each.value.name
+  resource_group_name = data.azurerm_resource_group.this.name
+  location            = data.azurerm_resource_group.this.location
+  virtual_wan_id      = azurerm_virtual_wan.this.id
+  address_prefix      = each.value.address_prefix
+}
+resource "azurerm_vpn_server_configuration" "this" {
+    for_each = var.azurerm_vpn_server_configuration
+  name                     = each.value.name
+  resource_group_name      = data.azurerm_resource_group.this.name
+  location                 = data.azurerm_resource_group.this.location
+  vpn_authentication_types = each.value.vpn_authentication_types
+dynamic "client_root_certificate" {
+    for_each = var.azurerm_vpn_server_configuration.client_root_certificate
+
+    content {
+      name             = client_root_certificate.value.name
+      public_cert_data = client_root_certificate.value.public_cert_data
+    }
+  }
+}
+
+resource "azurerm_point_to_site_vpn_gateway" "name" {
+    for_each = var.point_to_site_vpn_gateway
+  name = each.value.name
+  location = data.azurerm_resource_group.this.location
+  resource_group_name = data.azurerm_resource_group.this.name
+  virtual_hub_id = azurerm_virtual_hub[each.value].this.id
+  vpn_server_configuration_id = azurerm_vpn_server_configuration.this.id
+  scale_unit = each.value.scale_unit
+  dynamic "connection_configuration" {
+    for_each = var.point_to_site_vpn_gateway.connection_configuration
+
+    content {
+      name = connection_configuration.value.name
+
+      vpn_client_address_pool {
+        address_prefixes = connection_configuration.value.vpn_client_address_pool.address_prefixes
+      }
+    }
+  }
+
+  }
+
+
+
